@@ -273,16 +273,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const result = await state.pgo.run()
 
+      // Fixed schema order ensures stable KV-cache prefix across turns:
+      // only newErrors/totalUniqueErrors values change, not structure.
       return {
         content: [{
           type: "text",
           text: JSON.stringify({
-            newErrors: result.newErrors,
-            totalUniqueErrors: result.totalUniqueErrors,
             converged: result.converged,
-            formatted: result.newErrors.length > 0
-              ? `[Harness PGO] Found ${result.newErrors.length} new issue(s):\n\`\`\`\n${result.newErrors.join("\n")}\n\`\`\``
-              : "[Harness PGO] No new issues. Code looks clean.",
+            autoReset: result.autoReset,
+            newErrorCount: result.newErrors.length,
+            totalUniqueErrors: result.totalUniqueErrors,
+            newErrors: result.newErrors,
+            message: result.autoReset
+              ? `[Harness PGO] Error explosion (${result.newErrors.length} new). State re-baselined.`
+              : result.newErrors.length > 0
+                ? `[Harness PGO] ${result.newErrors.length} new issue(s) since last run.`
+                : "[Harness PGO] No new issues. Code looks clean.",
           }),
         }],
       }

@@ -31,7 +31,12 @@ export interface PGOResult {
   totalUniqueErrors: number
   /** Whether the incremental PGO has converged (no new errors in last run) */
   converged: boolean
+  /** True when error explosion triggered auto-reset (kidnapped-robot recovery) */
+  autoReset: boolean
 }
+
+/** If new errors in one run exceed this, treat as kidnapped-robot: re-baseline and signal reset */
+const AUTO_RESET_THRESHOLD = 15
 
 export class PGO {
   private baselines = new Map<string, string>()
@@ -77,13 +82,25 @@ export class PGO {
       }
     }
 
+    // Kidnapped-robot recovery: error explosion means PGO state is stale
+    // (e.g. dependency upgrade, tsconfig change). Re-baseline and signal reset.
+    if (allNewErrors.length > AUTO_RESET_THRESHOLD) {
+      await this.establishBaseline()
+      return {
+        newErrors: allNewErrors,
+        totalUniqueErrors: allNewErrors.length,
+        converged: false,
+        autoReset: true,
+      }
+    }
+
     this.lastRunHadNewErrors = allNewErrors.length > 0
 
-    // Return original (non-normalized) new errors for display
     return {
       newErrors: allNewErrors,
       totalUniqueErrors: this.totalUniqueShown(),
       converged: this.totalUniqueShown() > 0 && !this.lastRunHadNewErrors,
+      autoReset: false,
     }
   }
 
